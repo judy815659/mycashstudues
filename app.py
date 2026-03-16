@@ -29,9 +29,9 @@ with st.sidebar:
     st.header("新規入力")
     date = st.date_input("日付", datetime.now())
     t_type = st.radio("収支種別", ["支出", "収入"])
-    category = st.selectbox("カテゴリ", ["食費", "日用品", "娯楽", "固定費", "給与", "その他"])
+    category = st.selectbox("カテゴリ", ["食費", "外食", "日用品", "娯楽", "固定費", "給与", "その他"])
     amount = st.number_input("金額 (円)", min_value=0, step=100)
-    method = st.selectbox("支払方法", ["現金", "クレジットカード", "PayPay", "口座振替"])
+    method = st.selectbox("支払方法", ["現金", "クレジットカード", "d払い", "デビットカード", "paydy"])
     
     if st.button("データを保存"):
         conn = init_db()
