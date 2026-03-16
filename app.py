@@ -6,7 +6,7 @@ from dateutil.relativedelta import relativedelta
 
 # --- データベースの初期設定 ---
 def init_db():
-    conn = sqlite3.connect('kakeibo.db')
+    conn = sqlite3.connect('kakeibo_new.db')
     cursor = conn.cursor()
     # payment_month (支払い月) を追加して作成
     cursor.execute('''
