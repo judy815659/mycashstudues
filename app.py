@@ -66,3 +66,18 @@ if not df.empty:
     st.dataframe(df.sort_values('date', ascending=False))
 else:
     st.info("まだデータがありません。左のサイドバーから入力してください。")
+# --- 予算設定のセクションを追加 ---
+with st.sidebar:
+    st.divider() # 区切り線
+    monthly_budget = st.number_input("今月の手取り給与", min_value=0, value=0, step=1)
+
+# --- 収支計算のロジックを強化 ---
+if not df.empty:
+    total_expense = df[df['type'] == '支出']['amount'].sum()
+    remaining = monthly_budget - total_expense
+    
+    st.info(f"💡 今月の残り予算： **¥{remaining:,}**")
+    
+    # 予算に対する使用率のプログレスバー
+    percent = min(total_expense / monthly_budget, 1.0)
+    st.progress(percent, text=f"予算の {percent*100:.1f}% を使用中")
