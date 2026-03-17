@@ -48,15 +48,19 @@ if uploaded_file is not None:
     image = Image.open(uploaded_file)
     st.image(image, caption='アップロードされたレシート', use_column_width=True)
     
-    if st.button("文字を読み取る"):
-        # OCR実行（日本語と英語を指定）
+if st.button("文字を読み取る"):
         with st.spinner('解析中...'):
             try:
-                text = pytesseract.image_to_string(image, lang='jpn')
+                # サーバー環境(Linux)でのTesseractの場所を指定
+                pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'
+                
+                # OCR実行（言語を日本語と英語に指定）
+                text = pytesseract.image_to_string(image, lang='jpn+eng')
                 st.text_area("読み取り結果", text, height=200)
-                st.info("💡 このテキストから「金額」などをコピーして入力欄に使ってください。")
+                st.info("💡 このテキストから金額などを探してください。")
             except Exception as e:
-                st.error("OCRエンジンの準備ができていないようです。")
+                # エラーの詳細を表示するように変更
+                st.error(f"エラーが発生しました: {e}")
     
     # --- 分割払いや支払い月の設定 ---
     st.markdown("---")
