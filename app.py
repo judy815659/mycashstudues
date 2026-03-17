@@ -35,6 +35,28 @@ with st.sidebar:
     category = st.selectbox("カテゴリ", ["食費", "外食", "日用品", "娯楽", "固定費", "分割払", "給与", "その他"])
     amount = st.number_input("金額 (円)", min_value=0, step=100)
     method = st.selectbox("支払方法", ["現金", "クレジットカード", "d払い", "デビットカード", "paydy"])
+
+import pytesseract # 追加
+from PIL import Image # 追加
+
+# --- サイドバーの入力フォームの中に追記 ---
+st.subheader("📷 レシート読み取り")
+uploaded_file = st.file_uploader("レシートを撮影または選択", type=['jpg', 'jpeg', 'png'])
+
+if uploaded_file is not None:
+    # 画像を開く
+    image = Image.open(uploaded_file)
+    st.image(image, caption='アップロードされたレシート', use_column_width=True)
+    
+    if st.button("文字を読み取る"):
+        # OCR実行（日本語と英語を指定）
+        with st.spinner('解析中...'):
+            try:
+                text = pytesseract.image_to_string(image, lang='jpn')
+                st.text_area("読み取り結果", text, height=200)
+                st.info("💡 このテキストから「金額」などをコピーして入力欄に使ってください。")
+            except Exception as e:
+                st.error("OCRエンジンの準備ができていないようです。")
     
     # --- 分割払いや支払い月の設定 ---
     st.markdown("---")
