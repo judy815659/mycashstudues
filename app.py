@@ -53,12 +53,20 @@ with st.sidebar:
 
     if uploaded_file is not None:
         try:
-            # HEIC形式でもJPG形式でも自動で判別して開いてくれます
+            # HEIC形式にも対応できるように登録
+            pillow_heif.register_heif_opener() 
+            
+            # 画像を開く
             image = Image.open(uploaded_file)
+            
+            # 【重要：ここを追加！】
+            # これで「iPhone独自の形式」を「標準的な画像形式」に強制変換します
+            image = image.convert("RGB")
+            
             st.image(image, caption='アップロード画像', use_container_width=True)
         except Exception as e:
             st.error(f"画像が開けませんでした: {e}")
-
+            
     if st.button("文字を読み取る"):
             with st.spinner('解析中...'):
                 try:
