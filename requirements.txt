@@ -1,5 +1,6 @@
 streamlit
 pandas
-python-dateutil
-Pillow
 pytesseract
+Pillow
+python-dateutil
+pillow-heif
