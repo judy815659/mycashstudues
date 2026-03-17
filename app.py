@@ -122,4 +122,4 @@ if not df.empty:
 
     if monthly_budget > 0:
         remaining = monthly_budget - total_expense
-        st.info(f"💡 残り予算： **¥{remaining:,
+        st.info(f"💡 残り予算： **¥{remaining:,}**")
