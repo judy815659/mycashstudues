@@ -52,7 +52,7 @@ with st.sidebar:
                 try:
                     pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'
                     # 日本語と英語で読み取り
-                    text = pytesseract.image_to_string(image, lang='jpn+eng')
+                    text = pytesseract.image_to_string(image, lang='eng')
                     st.text_area("読み取り結果", text, height=150)
                     st.info("💡 金額をコピーして上の入力欄に使ってください")
                 except Exception as e:
