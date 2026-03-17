@@ -56,9 +56,10 @@ with st.sidebar:
                     test_eng = pytesseract.image_to_string(image, lang='eng')
                     st.write("英語モードの結果:", test_eng)
                     
-                    # --- テスト2: 日本語で試す ---
-                    test_jpn = pytesseract.image_to_string(image, lang='jpn')
-                    st.write("日本語モードの結果:", test_jpn)
+                    # --- 日本語モードの結果（設定を追加） ---
+                    # '--psm 6' は「ひと塊の文章として読む」という命令です
+                    test_jpn = pytesseract.image_to_string(image, lang='jpn', config='--psm 6')
+                    st.write("日本語モードの結果（調整後）:", test_jpn)
                     
                 except Exception as e:
                     st.error(f"プログラムが止まりました: {e}")
