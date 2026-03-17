@@ -1,3 +1,5 @@
 streamlit
 pandas
 python-dateutil
+Pillow
+pytesseract
