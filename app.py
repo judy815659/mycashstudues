@@ -6,6 +6,9 @@ from dateutil.relativedelta import relativedelta
 import pytesseract
 from PIL import Image
 import re
+from PIL import Image
+import pillow_heif # これを追加
+pillow_heif.register_heif_opener() # これも追加（HEIC対応の魔法）
 
 # --- 1. データベース設定 ---
 def init_db():
@@ -49,8 +52,12 @@ with st.sidebar:
     uploaded_file = st.file_uploader("レシートを選択", type=['jpg', 'jpeg', 'png'])
 
     if uploaded_file is not None:
-        image = Image.open(uploaded_file)
-        st.image(image, caption='アップロード画像', use_container_width=True)
+        try:
+            # HEIC形式でもJPG形式でも自動で判別して開いてくれます
+            image = Image.open(uploaded_file)
+            st.image(image, caption='アップロード画像', use_container_width=True)
+        except Exception as e:
+            st.error(f"画像が開けませんでした: {e}")
 
     if st.button("文字を読み取る"):
             with st.spinner('解析中...'):
