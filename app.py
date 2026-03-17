@@ -47,16 +47,21 @@ with st.sidebar:
         image = Image.open(uploaded_file)
         st.image(image, caption='アップロード画像', use_container_width=True)
         
-        if st.button("文字を読み取る"):
+    if st.button("文字を読み取る"):
             with st.spinner('解析中...'):
                 try:
                     pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'
-                    # 日本語と英語で読み取り
-                    text = pytesseract.image_to_string(image, lang='eng')
-                    st.text_area("読み取り結果", text, height=150)
-                    st.info("💡 金額をコピーして上の入力欄に使ってください")
+                    
+                    # --- テスト1: まずは英語だけで試す（辞書がなくても動くはず） ---
+                    test_eng = pytesseract.image_to_string(image, lang='eng')
+                    st.write("英語モードの結果:", test_eng)
+                    
+                    # --- テスト2: 日本語で試す ---
+                    test_jpn = pytesseract.image_to_string(image, lang='jpn')
+                    st.write("日本語モードの結果:", test_jpn)
+                    
                 except Exception as e:
-                    st.error(f"OCRエラー: {e}")
+                    st.error(f"プログラムが止まりました: {e}")
 
     # --- 分割払いや支払い月の設定 ---
     st.markdown("---")
