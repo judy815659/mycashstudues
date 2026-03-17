@@ -56,32 +56,40 @@ with st.sidebar:
             with st.spinner('解析中...'):
                 try:
                     pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'
-                    raw_text = pytesseract.image_to_string(image, lang='eng+jpn')
+                    # 日本語と英語を混ぜて読み込み
+                    raw_text = pytesseract.image_to_string(image, lang='jpn+eng')
                     
-                    # 1. 記号などを整理（¥やY、カンマを消して数字の塊を浮き彫りにする）
-                    text_for_search = raw_text.replace('¥', '').replace('Y', '').replace(',', '').replace(' ', '')
+                    # 1. 読み取りテキストを整理
+                    # 「¥」を「Y」や「S」と読み間違えることが多いので、これらを正規化
+                    clean_text = raw_text.replace(',', '').replace(' ', '')
                     
-                    # 2. 【ここがポイント！】3桁から5桁の数字の塊だけを抽出
-                    # \b は単語の境界、\d{3,5} は3〜5桁の数字を意味します
-                    found_numbers = re.findall(r'\b\d{3,5}\b', text_for_search)
+                    # 2. 【新ロジック】「合計」「小計」「支払」「税込」という言葉の周辺にある数字を抽出
+                    # 前後に 3〜5桁の数字（100円〜99,999円）がある箇所を狙う
+                    pattern = r'(?:合計|小計|支払|税込|合計|金額|S|A|G|Y)[\D]*(\d{3,5})'
+                    targets = re.findall(pattern, clean_text)
                     
-                    if found_numbers:
-                        st.write("💰 **金額っぽい数字：**")
-                        # 4400円のような「合計」は下の方にあることが多いので、
-                        # リストの後半にある大きな数字を優先して出します
-                        candidates = sorted(list(set(found_numbers)), key=int, reverse=True)
+                    # 3. 単純な3〜5桁の独立した数字も予備で拾う
+                    backups = re.findall(r'\b\d{3,5}\b', clean_text)
+                    
+                    # 候補を合体
+                    all_candidates = list(set(targets + backups))
+                    
+                    if all_candidates:
+                        st.write("💰 **合計金額の候補：**")
+                        # 合計金額はリストの中でも大きい方の数字であることが多いため、数値の大きい順に並べる
+                        final_list = sorted(all_candidates, key=int, reverse=True)
                         
-                        for num in candidates[:5]:
+                        for num in final_list[:5]:
                             if st.button(f"¥{num} をセット"):
                                 st.session_state['ocr_amount'] = int(num)
                                 st.rerun()
                     else:
-                        st.warning("3〜5桁の数字が見つかりませんでした。")
+                        st.warning("金額が見つかりませんでした。")
                     
-                    st.text_area("読み取り原文", raw_text, height=100)
+                    with st.expander("読み取り原文を表示"):
+                        st.text(raw_text)
                 except Exception as e:
                     st.error(f"エラー: {e}")
-
     # --- 分割払い設定 ---
     st.markdown("---")
     is_split = st.checkbox("分割払いにする")
