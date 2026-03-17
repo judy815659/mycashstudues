@@ -5,11 +5,11 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import pytesseract
 from PIL import Image
-import re # 数字を抽出するために必要
+import re
 
-# --- 1. データベースの初期設定 ---
+# --- 1. データベース設定 ---
 def init_db():
-    conn = sqlite3.connect('kakeibo_v4.db') # 念のためバージョン更新
+    conn = sqlite3.connect('kakeibo_v4.db')
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS records (
@@ -25,25 +25,25 @@ def init_db():
     conn.commit()
     return conn
 
-# --- 2. メイン画面のレイアウト設定 ---
+# --- 2. 画面設定 ---
 st.set_page_config(page_title="My家計簿アプリ", layout="centered")
 st.title("💰 Simple家計簿 & 支払い管理")
 
-# --- 3. 入力フォーム（サイドバー） ---
+# --- 3. サイドバー入力 ---
 with st.sidebar:
     st.header("新規入力")
     date = st.date_input("日付", datetime.now())
     t_type = st.radio("収支種別", ["支出", "収入"])
     category = st.selectbox("カテゴリ", ["食費", "外食", "日用品", "娯楽", "固定費", "分割払", "給与", "その他"])
     
-    # 【改良点】金額の入力欄に「プログラムから数字を流し込める」ようにしました
+    # セッション状態の初期化
     if 'ocr_amount' not in st.session_state:
         st.session_state['ocr_amount'] = 0
     
     amount = st.number_input("金額 (円)", min_value=0, step=100, key="amount_input", value=st.session_state['ocr_amount'])
     method = st.selectbox("支払方法", ["現金", "クレジットカード", "d払い", "デビットカード", "paydy"])
 
-    # --- レシート読み取りセクション ---
+    # --- OCRセクション ---
     st.markdown("---")
     st.subheader("📷 レシート読み取り")
     uploaded_file = st.file_uploader("レシートを選択", type=['jpg', 'jpeg', 'png'])
@@ -56,42 +56,33 @@ with st.sidebar:
             with st.spinner('解析中...'):
                 try:
                     pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'
-                    
-                    # 1. 英語・日本語両方で読み込み
                     raw_text = pytesseract.image_to_string(image, lang='eng+jpn')
                     
-                    # 2. 【強化】「合計」「小計」「支払」などのキーワードの後の数字を優先的に探す
-                    # また、電話番号（ハイフン入り）などを除外する工夫
+                    # 金額っぽい数字を抽出（カンマを消して3〜6桁の数字を探す）
                     clean_text = raw_text.replace(',', '')
+                    found_numbers = re.findall(r'\d{3,6}', clean_text)
                     
-                    # 金額っぽい数字を抽出（300円〜999,999円くらいを想定）
-                    potential_amounts = re.findall(r'(\d{3,6})', clean_text)
-                    
-                    # 3. 候補を表示する前に「明らかにおかしい数字」を弾く
-                    final_candidates = []
-                    for num in potential_amounts:
-                        # 8桁以上の長い数字（バーコードや電話番号）は除外
-                        if len(num) <= 6:
-                            final_candidates.append(num)
-
-                    if final_candidates:
+                    if found_numbers:
                         st.write("💰 **金額の候補（大きい順）：**")
-                        # 降順に並べて、上位いくつかを表示（合計金額はだいたい大きい数字なので）
-                        top_candidates = sorted(list(set(final_candidates)), key=int, reverse=True)[:5]
+                        # 降順（大きい順）に並べて、上位5つを表示
+                        top_candidates = sorted(list(set(found_numbers)), key=int, reverse=True)[:5]
                         
-                        cols = st.columns(len(top_candidates))
-                        for i, num in enumerate(top_candidates):
-                            if cols[i].button(f"¥{num}"):
+                        # ボタンを生成（エラー回避のため1つずつ縦に並べます）
+                        for num in top_candidates:
+                            if st.button(f"¥{num} をセット"):
                                 st.session_state['ocr_amount'] = int(num)
                                 st.rerun()
                     else:
-                        st.warning("金額が見つかりませんでした。")
+                        st.warning("数字が見つかりませんでした。")
+                    
+                    st.text_area("読み取り原文", raw_text, height=100)
+                except Exception as e:
+                    st.error(f"エラー: {e}")
 
-    # --- 分割払いや支払い月の設定 ---
+    # --- 分割払い設定 ---
     st.markdown("---")
     is_split = st.checkbox("分割払いにする")
     split_count = st.number_input("分割回数", min_value=2, max_value=60, value=2) if is_split else 1
-        
     next_month = datetime.now() + relativedelta(months=1)
     pay_start_month = st.date_input("支払い開始月", next_month)
 
@@ -105,15 +96,14 @@ with st.sidebar:
             cur.execute("INSERT INTO records (date, category, amount, method, type, payment_month) VALUES (?, ?, ?, ?, ?, ?)",
                         (date.strftime('%Y-%m-%d'), category, per_month_amount, method, t_type, p_month_str))
         conn.commit()
-        st.session_state['ocr_amount'] = 0 # 保存したらリセット
+        st.session_state['ocr_amount'] = 0
         st.success("保存完了！")
         st.rerun()
 
-    # --- 予算設定セクション ---
     st.divider() 
     monthly_budget = st.number_input("今月の手取り給与", min_value=0, value=0, step=1000)
 
-# --- 4. データの表示・分析（メイン画面） ---
+# --- 4. メイン表示 ---
 conn = init_db()
 df = pd.read_sql_query("SELECT * FROM records", conn)
 
@@ -132,3 +122,21 @@ if not df.empty:
     if monthly_budget > 0:
         remaining = monthly_budget - total_expense
         st.info(f"💡 残り予算： **¥{remaining:,}**")
+        percent = min(total_expense / monthly_budget, 1.0)
+        st.progress(percent, text=f"予算の {percent*100:.1f}% を使用中")
+
+    st.divider()
+    st.header("🗓️ 支払い予定")
+    all_months = sorted(df['payment_month'].unique(), reverse=True)
+    view_month = st.selectbox("月を選択", all_months)
+    month_df = df[df['payment_month'] == view_month]
+    
+    if not month_df.empty:
+        summary = month_df.groupby('method')['amount'].sum()
+        st.table(summary)
+        st.warning(f"{view_month} の総支払額: **¥{summary.sum():,}**")
+    
+    st.subheader("履歴")
+    st.dataframe(df.sort_values('date', ascending=False))
+else:
+    st.info("データがありません。")
