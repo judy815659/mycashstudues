@@ -62,14 +62,19 @@ with st.sidebar:
         if found_amounts or found_dates:
             st.info("💡 抽出された情報を選択してください")
             
-            # 金額ボタン
+            # 金額ボタン（修正版：エラーを回避するシンプルな書き方）
             if found_amounts:
                 st.write("金額：")
-                amt_cols = st.columns(len(set(found_amounts))[:3]) # 最大3つ表示
-                for i, num in enumerate(sorted(list(set(found_amounts)), key=int, reverse=True)[:3]):
-                    if st.button(f"¥{num}"):
-                        st.session_state['ocr_amount'] = int(num)
-                        st.rerun()
+                # 重複を消して、数値の大きい順に並べる
+                unique_amounts = sorted(list(set(found_amounts)), key=int, reverse=True)[:3]
+                
+                # ボタンを横に並べる設定（ここを修正しました）
+                cols = st.columns(len(unique_amounts))
+                for i, num in enumerate(unique_amounts):
+                    with cols[i]:
+                        if st.button(f"¥{num}"):
+                            st.session_state['ocr_amount'] = int(num)
+                            st.rerun()
 
             # 日付ボタン
             if found_dates:
