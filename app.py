@@ -51,29 +51,32 @@ with st.sidebar:
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
         st.image(image, caption='アップロード画像', use_container_width=True)
-        
-        if st.button("文字を読み取る"):
+
+    if st.button("文字を読み取る"):
             with st.spinner('解析中...'):
                 try:
                     pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'
                     raw_text = pytesseract.image_to_string(image, lang='eng+jpn')
                     
-                    # 金額っぽい数字を抽出（カンマを消して3〜6桁の数字を探す）
-                    clean_text = raw_text.replace(',', '')
-                    found_numbers = re.findall(r'\d{3,6}', clean_text)
+                    # 1. 記号などを整理（¥やY、カンマを消して数字の塊を浮き彫りにする）
+                    text_for_search = raw_text.replace('¥', '').replace('Y', '').replace(',', '').replace(' ', '')
+                    
+                    # 2. 【ここがポイント！】3桁から5桁の数字の塊だけを抽出
+                    # \b は単語の境界、\d{3,5} は3〜5桁の数字を意味します
+                    found_numbers = re.findall(r'\b\d{3,5}\b', text_for_search)
                     
                     if found_numbers:
-                        st.write("💰 **金額の候補（大きい順）：**")
-                        # 降順（大きい順）に並べて、上位5つを表示
-                        top_candidates = sorted(list(set(found_numbers)), key=int, reverse=True)[:5]
+                        st.write("💰 **金額っぽい数字：**")
+                        # 4400円のような「合計」は下の方にあることが多いので、
+                        # リストの後半にある大きな数字を優先して出します
+                        candidates = sorted(list(set(found_numbers)), key=int, reverse=True)
                         
-                        # ボタンを生成（エラー回避のため1つずつ縦に並べます）
-                        for num in top_candidates:
+                        for num in candidates[:5]:
                             if st.button(f"¥{num} をセット"):
                                 st.session_state['ocr_amount'] = int(num)
                                 st.rerun()
                     else:
-                        st.warning("数字が見つかりませんでした。")
+                        st.warning("3〜5桁の数字が見つかりませんでした。")
                     
                     st.text_area("読み取り原文", raw_text, height=100)
                 except Exception as e:
