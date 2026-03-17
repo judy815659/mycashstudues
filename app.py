@@ -57,26 +57,35 @@ with st.sidebar:
                 try:
                     pytesseract.pytesseract.tesseract_cmd = r'/usr/bin/tesseract'
                     
-                    # 英語モードの方が数字に強いため、まずは英語ベースで解析
+                    # 1. 英語・日本語両方で読み込み
                     raw_text = pytesseract.image_to_string(image, lang='eng+jpn')
                     
-                    # 正規表現で「金額っぽい数字（3〜6桁）」をすべて抽出
-                    found_numbers = re.findall(r'\d{3,6}', raw_text.replace(',', ''))
+                    # 2. 【強化】「合計」「小計」「支払」などのキーワードの後の数字を優先的に探す
+                    # また、電話番号（ハイフン入り）などを除外する工夫
+                    clean_text = raw_text.replace(',', '')
                     
-                    if found_numbers:
-                        st.write("💰 **金額の候補が見つかりました：**")
-                        # 重複を除いてボタンを並べる
-                        for num in sorted(list(set(found_numbers)), reverse=True)[:3]:
-                            if st.button(f"¥{num} をセットする"):
-                                st.session_state['ocr_amount'] = int(num)
-                                st.rerun() # 画面を再描画して金額欄に反映
-                    else:
-                        st.warning("数字が見つかりませんでした。")
+                    # 金額っぽい数字を抽出（300円〜999,999円くらいを想定）
+                    potential_amounts = re.findall(r'(\d{3,6})', clean_text)
+                    
+                    # 3. 候補を表示する前に「明らかにおかしい数字」を弾く
+                    final_candidates = []
+                    for num in potential_amounts:
+                        # 8桁以上の長い数字（バーコードや電話番号）は除外
+                        if len(num) <= 6:
+                            final_candidates.append(num)
+
+                    if final_candidates:
+                        st.write("💰 **金額の候補（大きい順）：**")
+                        # 降順に並べて、上位いくつかを表示（合計金額はだいたい大きい数字なので）
+                        top_candidates = sorted(list(set(final_candidates)), key=int, reverse=True)[:5]
                         
-                    st.text_area("読み取り原文（確認用）", raw_text, height=100)
-                    
-                except Exception as e:
-                    st.error(f"エラー: {e}")
+                        cols = st.columns(len(top_candidates))
+                        for i, num in enumerate(top_candidates):
+                            if cols[i].button(f"¥{num}"):
+                                st.session_state['ocr_amount'] = int(num)
+                                st.rerun()
+                    else:
+                        st.warning("金額が見つかりませんでした。")
 
     # --- 分割払いや支払い月の設定 ---
     st.markdown("---")
