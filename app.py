@@ -37,9 +37,16 @@ with st.sidebar:
     if 'ocr_date' not in st.session_state:
         st.session_state['ocr_date'] = datetime.now()
 
-    date = st.date_input("日付", value=st.session_state['ocr_date'])
-    t_type = st.radio("収支種別", ["支出", "収入"])
-    category = st.selectbox("カテゴリ", ["食費", "外食", "日用品", "娯楽", "固定費", "分割払", "給与", "その他"])
+   # --- カテゴリ選択 ---
+    category_list = ["食費", "外食", "日用品", "娯楽", "固定費", "分割払", "給与", "その他"]
+    category = st.selectbox("カテゴリ", category_list)
+    
+    # 【新機能】カテゴリが「給与」なら、デフォルトを「収入」にするロジック
+    default_type_index = 0 # デフォルトは「支出」
+    if category == "給与":
+        default_type_index = 1 # 「収入」に切り替え
+        
+    t_type = st.radio("収支種別", ["支出", "収入"], index=default_type_index)
     
     amount = st.number_input("金額 (円)", min_value=0, step=100, key="amount_input", value=st.session_state['ocr_amount'])
     method = st.selectbox("支払方法", ["現金", "クレジットカード", "d払い", "デビットカード", "paydy"])
