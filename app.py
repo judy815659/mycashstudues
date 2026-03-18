@@ -67,25 +67,39 @@ with st.sidebar:
                 st.session_state['ocr_memo'] = pasted_text.replace('\n', ' ')[:100]; st.rerun()
 
     if st.button("💾 スプシへ保存"):
-        df_current = get_data()
-        new_row = pd.DataFrame([{
-            "date": target_date.strftime('%Y-%m-%d'),
-            "category": category,
-            "amount": amount,
-            "method": method,
-            "type": t_type,
-            "payment_month": target_date.strftime('%Y-%m'),
-            "memo": memo,
-            "is_calc": 1 if is_calc else 0
-        }])
-        updated_df = pd.concat([df_current, new_row], ignore_index=True)
-        conn.update(data=updated_df)
-        
-        st.session_state['ocr_amount'] = 0
-        st.session_state['ocr_date'] = datetime.now()
-        st.session_state['ocr_memo'] = ""
-        st.success("保存完了！")
-        st.rerun()
+        try:
+            # 現在のデータを取得。もし空っぽなら新しいDFを作る
+            try:
+                df_current = get_data()
+            except:
+                df_current = pd.DataFrame(columns=["date", "category", "amount", "method", "type", "payment_month", "memo", "is_calc"])
+            
+            new_row = pd.DataFrame([{
+                "date": target_date.strftime('%Y-%m-%d'),
+                "category": category,
+                "amount": amount,
+                "method": method,
+                "type": t_type,
+                "payment_month": target_date.strftime('%Y-%m'),
+                "memo": memo,
+                "is_calc": 1 if is_calc else 0
+            }])
+            
+            # 既存データと結合（空の場合はnew_rowのみ）
+            if df_current is not None and not df_current.empty:
+                updated_df = pd.concat([df_current, new_row], ignore_index=True)
+            else:
+                updated_df = new_row
+            
+            # スプシを上書き更新
+            conn.update(data=updated_df)
+            
+            st.success("スプレッドシートに保存しました！")
+            st.session_state['ocr_amount'] = 0
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"保存に失敗しました。共有設定が『編集者』になっているか確認してください。エラー詳細: {e}")
 
 # --- 4. メメイン表示 ---
 df = get_data()
