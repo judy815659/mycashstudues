@@ -101,22 +101,45 @@ with st.sidebar:
         except Exception as e:
             st.error(f"保存に失敗しました。共有設定が『編集者』になっているか確認してください。エラー詳細: {e}")
 
-# --- 4. メメイン表示 ---
+# --- 4. メイン表示 ---
 df = get_data()
 
 if df is not None and not df.empty:
     this_month = datetime.now().strftime('%Y-%m')
     df['date'] = df['date'].astype(str)
-    df_this_month = df[df['date'].str.contains(this_month)]
     
+    # 集計ロジック
+    df_this_month = df[df['date'].str.contains(this_month)]
     df_calc = df_this_month[df_this_month['is_calc'] == 1]
-    # 金額を数値に変換して合計
     total_expense = pd.to_numeric(df_calc[df_calc['type'] == '支出']['amount'], errors='coerce').fillna(0).sum()
     
     st.header(f"📊 {this_month} の支出合計")
     st.metric("総支出", f"¥{int(total_expense):,}")
     
-    st.subheader("履歴一覧")
-    st.dataframe(df.sort_values("date", ascending=False), use_container_width=True)
+    st.divider()
+    st.subheader("履歴の管理（削除もこちら）")
+    
+    # st.data_editor を使うことで、行の選択が可能になります
+    # 削除しやすいようにインデックス（行番号）を表示します
+    edited_df = st.data_editor(
+        df.sort_values("date", ascending=False),
+        use_container_width=True,
+        num_rows="dynamic",  # 行の選択・削除を可能にする設定
+        key="data_editor"
+    )
+
+    # 削除の実行ボタン
+    if st.button("🗑️ 選択した行をスプシから削除する"):
+        # 元のdfと表示中のedited_dfを比較して、消されたデータを確認
+        # インデックスが変わらないように現在の表示内容でスプシを丸ごと上書きします
+        try:
+            conn.update(data=edited_df)
+            st.success("スプレッドシートを更新（削除完了）しました！")
+            st.rerun()
+        except Exception as e:
+            st.error(f"削除に失敗しました: {e}")
+            
+    st.caption("※左端のチェックボックスで選択して『Deleteキー』または『ゴミ箱アイコン』で消してから、上のボタンを押してください。")
+
 else:
-    st.info("スプレッドシートの1行目にヘッダーがあるか確認してください。")
+    st.info("スプレッドシートにデータがありません。")
