@@ -116,7 +116,8 @@ with st.sidebar:
 
 # --- 4. メイン表示 ---
 conn = init_db()
-df = pd.read_sql_query("SELECT date, category, amount, type, memo, method FROM records ORDER BY date DESC", conn)
+# 削除しやすいように ID も取得します
+df = pd.read_sql_query("SELECT id, date, category, amount, type, memo, method FROM records ORDER BY date DESC", conn)
 
 if not df.empty:
     this_month = datetime.now().strftime('%Y-%m')
@@ -126,7 +127,41 @@ if not df.empty:
     st.header(f"📊 {this_month} の支出合計")
     st.metric("総支出", f"¥{total_expense:,}")
     
-    st.subheader("履歴（備考も確認できます）")
-    st.dataframe(df, use_container_width=True)
+    st.divider()
+    st.subheader("履歴の管理")
+    
+    # 【新機能】データ選択削除
+    # st.data_editor を使うと、左側にチェックボックスが出現します
+    edited_df = st.data_editor(
+        df,
+        column_config={
+            "id": None,  # IDは見せなくて良いので非表示
+        },
+        disabled=["date", "category", "amount", "type", "memo", "method"], # 中身の編集は不可にする
+        use_container_width=True,
+        key="data_editor",
+        num_rows="dynamic" # 行の選択を可能に
+    )
+
+    # 選択された行を特定して削除するボタン
+    # data_editorのステータスから、削除（選択）された行を取得
+    if st.button("🗑️ 選択した行を削除する"):
+        # 実際には「消された行」以外のデータが edited_df に残るので、
+        # データベースを現在の表示内容で上書きするか、差分で消す処理をします
+        
+        # もっとも確実な「削除されたID」を特定する方法
+        current_ids = edited_df["id"].tolist()
+        all_ids = df["id"].tolist()
+        delete_ids = list(set(all_ids) - set(current_ids))
+
+        if delete_ids:
+            cursor = conn.cursor()
+            for d_id in delete_ids:
+                cursor.execute("DELETE FROM records WHERE id = ?", (d_id,))
+            conn.commit()
+            st.success(f"{len(delete_ids)} 件のデータを削除しました。")
+            st.rerun()
+        else:
+            st.info("削除したい行を左側のチェックボックスで選択して、ゴミ箱アイコン（またはDeleteキー）で消してからこのボタンを押してください。")
 else:
     st.info("データがありません。")
