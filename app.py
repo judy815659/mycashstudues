@@ -91,6 +91,27 @@ if df is not None and not df.empty:
     # 来月の請求予定 (payment_monthが来月のもの)
     total_next = df[(df['payment_month'] == next_month) & (df['type'] == '支出')]['amount'].sum()
     
-　　　col1, col2 = st.columns(2)  # 2つの列を作る
+    # メトリック表示
+    col1, col2 = st.columns(2)
     col1.metric(f"📊 {this_month} の支出", f"¥{int(total_this):,}")
     col2.metric(f"📅 {next_month} の予定", f"¥{int(total_next):,}")
+
+    st.divider()
+    
+    # 履歴一覧（編集・削除機能付き）
+    st.subheader("📝 履歴の編集・削除")
+    edited_df = st.data_editor(
+        df.sort_values("date", ascending=False),
+        use_container_width=True,
+        num_rows="dynamic"
+    )
+    
+    if st.button("🗑️ 変更をスプシに反映する"):
+        conn.update(data=edited_df)
+        st.success("スプレッドシートを更新しました！")
+        st.rerun()
+
+    # スプシへのリンク
+    st.link_button("📈 スプレッドシートを直接開く", "https://docs.google.com/spreadsheets/d/1debBotyTDwqUAmcEox0fdJIuvyv7Cko6I3NlvCTNVhY/edit")
+else:
+    st.info("データがありません。サイドバーから入力してください。")
