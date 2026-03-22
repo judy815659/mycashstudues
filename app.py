@@ -27,7 +27,7 @@ with st.sidebar:
 
     # 入力フォーム
     target_date = st.date_input("日付", value=st.session_state['ocr_date'])
-    category = st.selectbox("カテゴリ", ["食費", "外食", "日用品", "娯楽", "固定費", "分割払", "給与", "その他"])
+    category = st.selectbox("カテゴリ", ["食費", "外食", "日用品", "娯楽",  "医療費", "交通費", "固定費", "分割払", "給与", "その他"])
     
     t_type_index = 1 if category == "給与" else 0
     t_type = st.radio("収支種別", ["支出", "収入"], index=t_type_index)
