@@ -91,5 +91,6 @@ if df is not None and not df.empty:
     # 来月の請求予定 (payment_monthが来月のもの)
     total_next = df[(df['payment_month'] == next_month) & (df['type'] == '支出')]['amount'].sum()
     
-    # メトリック表示
-    col
+　　　col1, col2 = st.columns(2)  # 2つの列を作る
+    col1.metric(f"📊 {this_month} の支出", f"¥{int(total_this):,}")
+    col2.metric(f"📅 {next_month} の予定", f"¥{int(total_next):,}")
