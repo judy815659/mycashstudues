@@ -105,41 +105,34 @@ with st.sidebar:
 df = get_data()
 
 if df is not None and not df.empty:
-    this_month = datetime.now().strftime('%Y-%m')
-    df['date'] = df['date'].astype(str)
+    # 現在の月と「来月」の文字列を取得
+    today = datetime.now()
+    this_month = today.strftime('%Y-%m')
+    next_month = (today + relativedelta(months=1)).strftime('%Y-%m')
     
-    # 集計ロジック
+    # 【追加】来月の支払い予定の集計
+    # payment_month が来月のものを抽出
+    df['payment_month'] = df['payment_month'].astype(str)
+    df_next_month = df[df['payment_month'] == next_month]
+    
+    # 来月払う予定の合計（支出のみ）
+    next_total_expense = pd.to_numeric(df_next_month[df_next_month['type'] == '支出']['amount'], errors='coerce').fillna(0).sum()
+
+    # --- 今月の表示（既存） ---
+    df['date'] = df['date'].astype(str)
     df_this_month = df[df['date'].str.contains(this_month)]
     df_calc = df_this_month[df_this_month['is_calc'] == 1]
     total_expense = pd.to_numeric(df_calc[df_calc['type'] == '支出']['amount'], errors='coerce').fillna(0).sum()
     
-    st.header(f"📊 {this_month} の支出合計")
-    st.metric("総支出", f"¥{int(total_expense):,}")
+    # 2つの月を並べて表示
+    col1, col2 = st.columns(2)
+    with col1:
+        st.header(f"📊 {this_month} の支出")
+        st.metric("今月の実支出", f"¥{int(total_expense):,}")
     
-    st.divider()
-    st.subheader("履歴の管理（削除もこちら）")
-    
-    # st.data_editor を使うことで、行の選択が可能になります
-    # 削除しやすいようにインデックス（行番号）を表示します
-    edited_df = st.data_editor(
-        df.sort_values("date", ascending=False),
-        use_container_width=True,
-        num_rows="dynamic",  # 行の選択・削除を可能にする設定
-        key="data_editor"
-    )
+    with col2:
+        st.header(f"📅 {next_month} の請求予定")
+        st.metric("来月の支払い合計", f"¥{int(next_total_expense):,}", delta_color="inverse")
+        st.caption("※Paydyやクレカの支払い月指定分")
 
-    # 削除の実行ボタン
-    if st.button("🗑️ 選択した行をスプシから削除する"):
-        # 元のdfと表示中のedited_dfを比較して、消されたデータを確認
-        # インデックスが変わらないように現在の表示内容でスプシを丸ごと上書きします
-        try:
-            conn.update(data=edited_df)
-            st.success("スプレッドシートを更新（削除完了）しました！")
-            st.rerun()
-        except Exception as e:
-            st.error(f"削除に失敗しました: {e}")
-            
-    st.caption("※左端のチェックボックスで選択して『Deleteキー』または『ゴミ箱アイコン』で消してから、上のボタンを押してください。")
-
-else:
-    st.info("スプレッドシートにデータがありません。")
+    # (以下、履歴一覧と削除ボタンのコードへ続く...)
