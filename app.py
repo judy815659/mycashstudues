@@ -138,15 +138,12 @@ if df is not None and not df.empty:
     # 表示用に不要な列を隠す
     df_history = df_history.drop(columns=['date_dt', 'month_key'])
     
-    edited_df = st.data_editor(df_history, use_container_width=True, num_rows="dynamic")
+    # 修正前：edited_df = st.data_editor(df_display, use_container_width=True, num_rows="dynamic")
     
-    if st.button("🗑️ この月の変更を反映する"):
-        # 注意：このボタンは表示されている月以外のデータに影響を与えないよう、
-        # 既存の全データとマージして更新する必要があります
-        other_months_df = df[df['month_key'] != selected_month].drop(columns=['date_dt', 'month_key'])
-        final_df = pd.concat([other_months_df, edited_df], ignore_index=True)
-        conn.update(data=final_df)
-        st.success("更新しました！")
-        st.rerun()
-else:
-    st.info("データがありません。")
+    # 修正後：keyにselected_monthを含めることで、月を切り替えるたびに別物として認識させます
+    edited_df = st.data_editor(
+        df_display, 
+        use_container_width=True, 
+        num_rows="dynamic",
+        key=f"data_editor_{selected_month}"  # ← ここを追加！
+    )
