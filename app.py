@@ -76,42 +76,63 @@ with st.sidebar:
 df = get_data()
 
 if df is not None and not df.empty:
-    # データ型の整理
+    # データの型を強制的に変換（計算エラー防止）
     df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0)
-    df['payment_month'] = df['payment_month'].astype(str)
-    df['date'] = df['date'].astype(str)
-    
-    today = datetime.now()
-    this_month = today.strftime('%Y-%m')
-    next_month = (today + relativedelta(months=1)).strftime('%Y-%m')
+    df['date'] = pd.to_datetime(df['date'], errors='coerce')
+    df['month'] = df['date'].dt.strftime('%Y-%m')  # グラフ用に「月」列を作成
 
-    # 今月の支出合計 (is_calcが1のもの)
-    total_this = df[(df['date'].str.contains(this_month)) & (df['is_calc'] == 1) & (df['type'] == '支出')]['amount'].sum()
-    
-    # 来月の請求予定 (payment_monthが来月のもの)
-    total_next = df[(df['payment_month'] == next_month) & (df['type'] == '支出')]['amount'].sum()
-    
-    # メトリック表示
+    # 今月の取得
+    today = datetime.now()
+    this_month_str = today.strftime('%Y-%m')
+    next_month_str = (today + relativedelta(months=1)).strftime('%Y-%m')
+
+    # メトリック表示（今月と来月）
     col1, col2 = st.columns(2)
-    col1.metric(f"📊 {this_month} の支出", f"¥{int(total_this):,}")
-    col2.metric(f"📅 {next_month} の予定", f"¥{int(total_next):,}")
+    total_this = df[(df['month'] == this_month_str) & (df['is_calc'] == 1) & (df['type'] == '支出')]['amount'].sum()
+    total_next = df[(df['payment_month'].astype(str).str.contains(next_month_str)) & (df['type'] == '支出')]['amount'].sum()
+    
+    col1.metric(f"📊 {this_month_str} の総支出", f"¥{int(total_this):,}")
+    col2.metric(f"📅 {next_month_str} の請求予定", f"¥{int(total_next):,}")
 
     st.divider()
+
+    # --- 📈 分析セクション ---
+    st.header("🔍 家計の振り返り・分析")
     
-    # 履歴一覧（編集・削除機能付き）
-    st.subheader("📝 履歴の編集・削除")
-    edited_df = st.data_editor(
-        df.sort_values("date", ascending=False),
-        use_container_width=True,
-        num_rows="dynamic"
-    )
+    tab1, tab2 = st.tabs(["📈 月別の推移", "🍕 カテゴリ内訳"])
+
+    with tab1:
+        st.subheader("月別支出の推移")
+        # 月ごとに支出を合計（収入を除外）
+        monthly_df = df[df['type'] == '支出'].groupby('month')['amount'].sum().reset_index()
+        # 棒グラフを表示
+        st.bar_chart(data=monthly_df, x='month', y='amount', color="#ff4b4b")
+
+    with tab2:
+        st.subheader(f"{this_month_str} のカテゴリ別内訳")
+        # 今月の支出内訳を抽出
+        category_df = df[(df['month'] == this_month_str) & (df['type'] == '支出')]
+        if not category_df.empty:
+            pie_data = category_df.groupby('category')['amount'].sum()
+            st.write("カテゴリごとの合計額（多い順）")
+            st.table(pie_data.sort_values(ascending=False))
+            # 円グラフは標準機能だと少し弱いので、簡易的に棒グラフでも内訳を表示
+            st.bar_chart(pie_data)
+        else:
+            st.info("今月の支出データがまだありません。")
+
+    st.divider()
+    # --- 履歴一覧（削除・修正） ---
+    st.subheader("📝 履歴一覧")
+    # 日付順に並び替えて表示（型を文字列に戻して表示）
+    df_display = df.copy()
+    df_display['date'] = df_display['date'].dt.strftime('%Y-%m-%d')
+    edited_df = st.data_editor(df_display.sort_values("date", ascending=False).drop(columns=['month']), use_container_width=True, num_rows="dynamic")
     
-    if st.button("🗑️ 変更をスプシに反映する"):
+    if st.button("🗑️ 変更を確定する"):
         conn.update(data=edited_df)
-        st.success("スプレッドシートを更新しました！")
+        st.success("スプシを更新しました！")
         st.rerun()
 
-    # スプシへのリンク
-    st.link_button("📈 スプレッドシートを直接開く", "https://docs.google.com/spreadsheets/d/1debBotyTDwqUAmcEox0fdJIuvyv7Cko6I3NlvCTNVhY/edit")
 else:
-    st.info("データがありません。サイドバーから入力してください。")
+    st.info("データがまだありません。")
