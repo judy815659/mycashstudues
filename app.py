@@ -113,25 +113,39 @@ if df is not None and not df.empty:
             st.bar_chart(cat_df)
             st.table(cat_df.map(lambda x: f"¥{x:,}"))
 
-    with tab2:
+with tab2:
         view_mode = st.radio("表示リスト:", [f"{selected_month} 発生分", f"{selected_month} 支払分"], horizontal=True)
         target_df = df_actual_all if "発生" in view_mode else df_pay_all
         
+        # --- 並び順の修正ポイント ---
         df_display = target_df.copy()
-        df_display['date'] = df_display['date_dt'].dt.strftime('%Y-%m-%d')
-        df_display = df_display.drop(columns=['date_dt', 'month_key', 'pay_month_clean']).sort_values("date", ascending=False)
+        # 日付型に変換して確実に並び替えができるようにする
+        df_display['date'] = pd.to_datetime(df_display['date'], errors='coerce')
+        # 新しい日付が一番上に来るようにソート (ascending=False)
+        df_display = df_display.sort_values("date", ascending=False)
+        # 表示用に日付フォーマットを整える
+        df_display['date'] = df_display['date'].dt.strftime('%Y-%m-%d')
         
-        edited_df = st.data_editor(df_display, use_container_width=True, num_rows="dynamic", key=f"ed_{selected_month}_{view_mode}")
+        # 不要な内部処理用カラムを落として表示
+        df_display = df_display.drop(columns=['date_dt', 'month_key', 'pay_month_clean'])
+        
+        edited_df = st.data_editor(
+            df_display, 
+            use_container_width=True, 
+            num_rows="dynamic", 
+            key=f"ed_{selected_month}_{view_mode}"
+        )
         
         if st.button("🗑️ 変更を確定する"):
+            # 保存時も全体を日付順に整えてからスプシへ飛ばす
             all_data = get_data()
-            # 既存データから対象月の分を除いて合体
             other_data = df.drop(target_df.index).drop(columns=['date_dt', 'month_key', 'pay_month_clean'])
             final_df = pd.concat([other_data, edited_df], ignore_index=True)
+            
+            # スプシ保存直前に日付で昇順（古い順）に並び替えておくとスプシが綺麗になります
+            final_df['date'] = pd.to_datetime(final_df['date'])
+            final_df = final_df.sort_values("date").reset_index(drop=True)
+            
             conn.update(data=final_df)
-            st.success("スプレッドシートを更新しました")
+            st.success("日付順に整理してスプレッドシートを更新しました！")
             st.rerun()
-
-    st.link_button("📈 スプレッドシートを直接開く", "https://docs.google.com/spreadsheets/d/1debBotyTDwqUAmcEox0fdJIuvyv7Cko6I3NlvCTNVhY/edit")
-else:
-    st.info("データがありません。")
