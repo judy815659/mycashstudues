@@ -1,4 +1,5 @@
 streamlit
+streamlit-gsheets
 pandas
-st-gsheets-connection
 python-dateutil
+google-generativeai
