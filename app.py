@@ -181,3 +181,54 @@ with tab2:
             conn.update(data=final_df)
             st.success("日付順に整理してスプレッドシートを更新しました！")
             st.rerun()
+import google.generativeai as genai
+
+# --- 5. AIアドバイザー設定 ---
+st.divider()
+st.header("🤖 AI家計再生アドバイザー")
+
+# サイドバーまたは設定タブでAIへの「希望・目標」を入力できるようにします
+with st.expander("📝 あなたの目標やライフスタイルをAIに教える"):
+    user_vision = st.text_area(
+        "AIへの指示（例：年収600万を目指している、配当生活がしたい、猫2匹との暮らしを大事にしたい、など）",
+        value="年収600万円を目指しており、将来的には資産を形成して配当生活をしたい。日々のQOLも大事にしつつ、無駄な支出を鋭く指摘してほしい。",
+        key="user_vision"
+    )
+
+# APIキーの入力（本来はSecrets管理がベストですが、まずは入力形式で）
+api_key = st.text_input("Gemini API Keyを入力してください", type="password")
+
+if st.button("📊 AIに今月の分析をお願いする"):
+    if not api_key:
+        st.warning("AIzaSyAK0aK3hh2UjjM7eoOmXal3Mt6b1lPIO1w")
+    else:
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            
+            # AIに渡すデータの準備
+            # 今月の支出をカテゴリ別にまとめたテキストを作成
+            monthly_summary = df_actual_all.groupby('category')['amount'].sum().to_string()
+            
+            # AIへのプロンプト
+            prompt = f"""
+            あなたは優秀な家計管理アドバイザーです。
+            以下のユーザーの「希望」と「今月の支出データ」を分析し、目標達成のためのアドバイスを300文字程度で伝えてください。
+            
+            【ユーザーの希望・状況】
+            {user_vision}
+            
+            【今月({selected_month})の支出データ】
+            {monthly_summary}
+            
+            【アドバイスの指針】
+            - 厳しいだけでなく、ユーザーのQOLや猫との生活への配慮も含めた温かい口調で。
+            - 資産形成（100万円貯金）に向けた具体的な一歩を提案して。
+            """
+            
+            with st.spinner("AIが分析中..."):
+                response = model.generate_content(prompt)
+                st.chat_message("assistant").write(response.text)
+                
+        except Exception as e:
+            st.error(f"AI分析中にエラーが発生しました: {e}")
