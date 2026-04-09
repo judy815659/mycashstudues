@@ -74,6 +74,7 @@ with st.sidebar:
 
 # --- 4. メイン表示 ---
 df = get_data()
+st.write(f"デバッグ情報：現在スプシから {len(df)} 件のデータを読み込んでいます")
 
 if df is not None and not df.empty:
     # データの型を強制的に変換（計算エラー防止）
