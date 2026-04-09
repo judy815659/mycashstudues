@@ -152,7 +152,7 @@ if df is not None and not df.empty:
                 if not df_actual_all.empty:
                     try:
                         # 'models/' を付けるか、最新の 2.0-flash を試してみてください
-　　　　　　　　　　　　　　 model = genai.GenerativeModel('models/gemini-1.5-flash')
+                        model = genai.GenerativeModel('models/gemini-1.5-flash')
                         monthly_summary = df_actual_all.groupby('category')['amount'].sum().to_string()
                         
                         prompt = f"""
