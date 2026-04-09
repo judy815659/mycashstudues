@@ -53,82 +53,84 @@ with st.sidebar:
         except Exception as e:
             st.error(f"保存失敗: {e}")
 
+# (前半のインポートや入力部分は変更なしのため、メイン表示部分を強化します)
+
 # --- 4. メイン表示 ---
 df = get_data()
 
 if df is not None and not df.empty:
-    # --- 型変換の徹底（計算エラー防止） ---
     df = df.copy()
     df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0).astype(int)
-    
-    def cleanup_bool(x):
-        if str(x).upper() in ["TRUE", "1", "1.0", "YES"]: return 1
-        return 0
-    df['is_calc_clean'] = df['is_calc'].apply(cleanup_bool)
-    
     df['date_dt'] = pd.to_datetime(df['date'], errors='coerce')
     df['month_key'] = df['date_dt'].dt.strftime('%Y-%m')
     df['pay_month_clean'] = df['payment_month'].astype(str).str.replace('/', '-').str.strip()
 
     # 月の選択
     available_months = sorted(df['month_key'].dropna().unique(), reverse=True)
-    if not available_months:
-        available_months = [datetime.now().strftime('%Y-%m')]
     selected_month = st.selectbox("表示する月を選択してください", available_months)
 
-    # --- 集計 ---
-    df_actual = df[(df['month_key'] == selected_month) & (df['type'].str.contains('支出')) & (df['is_calc_clean'] == 1)]
-    total_actual = int(df_actual['amount'].sum())
+    # --- 厳密な集計ロジック ---
+    # A. 【3月に買ったもの全部】 (is_calcに関わらず、その月に発生した支出)
+    df_actual_all = df[(df['month_key'] == selected_month) & (df['type'].str.contains('支出'))]
+    total_actual = int(df_actual_all['amount'].sum())
 
-    df_pay = df[(df['pay_month_clean'] == selected_month) & (df['type'].str.contains('支出'))]
-    total_pay = int(df_pay['amount'].sum())
+    # B. 【3月に支払ったもの全部】 (payment_monthが3月の支出)
+    df_pay_all = df[(df['pay_month_clean'] == selected_month) & (df['type'].str.contains('支出'))]
+    total_pay = int(df_pay_all['amount'].sum())
 
     # --- 表示 ---
     col1, col2 = st.columns(2)
-    col1.metric(f"📊 {selected_month} の実支出", f"¥{total_actual:,}")
-    col2.metric(f"📅 {selected_month} の引落予定", f"¥{total_pay:,}")
+    with col1:
+        st.metric(f"🛒 {selected_month} に買った合計", f"¥{total_actual:,}")
+        st.caption("※日付がこの月の支出すべて（発生ベース）")
+    with col2:
+        st.metric(f"💸 {selected_month} の引落合計", f"¥{total_pay:,}")
+        st.caption("※支払い月がこの月の支出すべて（キャッシュレス等）")
 
     st.divider()
 
-    # --- 📈 分析 & 📝 履歴のタブ分け ---
-    tab1, tab2, tab3 = st.tabs(["🍕 カテゴリ内訳", "📈 支出推移", "📝 履歴の編集・削除"])
+    # --- 📈 分析 & 📝 履歴 ---
+    tab1, tab2 = st.tabs(["📊 カテゴリ内訳", "📝 履歴を確認・修正"])
 
     with tab1:
-        if not df_actual.empty:
-            category_df = df_actual.groupby('category')['amount'].sum().sort_values(ascending=False)
+        st.subheader(f"{selected_month} のカテゴリ内訳 (発生ベース)")
+        if not df_actual_all.empty:
+            category_df = df_actual_all.groupby('category')['amount'].sum().sort_values(ascending=False)
             st.bar_chart(category_df)
             st.table(category_df.map(lambda x: f"¥{x:,}"))
-        else:
-            st.info("この月の支出データはありません。")
 
     with tab2:
-        monthly_trend = df[df['type'].str.contains('支出')].groupby('month_key')['amount'].sum().reset_index()
-        st.line_chart(data=monthly_trend, x='month_key', y='amount')
+        # 見たいリストの切り替え
+        view_mode = st.radio(
+            "表示するリストを選択:",
+            [f"{selected_month} に「買った」ものリスト", f"{selected_month} に「支払った」ものリスト"],
+            horizontal=True
+        )
 
-    with tab3:
-        st.subheader(f"{selected_month} の詳細明細")
-        # 選択した月のデータだけを表示用に整理
-        df_history = df[df['month_key'] == selected_month].copy()
-        df_history['date'] = df_history['date_dt'].dt.strftime('%Y-%m-%d')
-        # 不要なデバッグ用列を削除して表示
-        df_display = df_history.drop(columns=['date_dt', 'month_key', 'is_calc_clean', 'pay_month_clean']).sort_values("date", ascending=False)
+        if "「買った」" in view_mode:
+            target_df = df_actual_all.copy()
+        else:
+            target_df = df_pay_all.copy()
+
+        target_df['date'] = target_df['date_dt'].dt.strftime('%Y-%m-%d')
+        df_display = target_df.drop(columns=['date_dt', 'month_key', 'pay_month_clean']).sort_values("date", ascending=False)
         
         # 編集エディタ
         edited_df = st.data_editor(
             df_display, 
             use_container_width=True, 
             num_rows="dynamic",
-            key=f"editor_{selected_month}"
+            key=f"editor_{selected_month}_{view_mode}"
         )
         
-        if st.button("🗑️ 変更をスプシに反映する"):
-            # 他の月のデータと合体させて保存
-            other_months = df[df['month_key'] != selected_month].drop(columns=['date_dt', 'month_key', 'is_calc_clean', 'pay_month_clean'])
-            final_df = pd.concat([other_months, edited_df], ignore_index=True)
-            conn.update(data=final_df)
-            st.success("スプレッドシートを更新しました！")
+        if st.button("🗑️ 変更をスプレッドシートに反映する"):
+            # 編集されたデータ以外を抽出して合体（更新ロジック）
+            # ※この簡易更新では、全体を読み直して該当月以外とマージします
+            all_data = get_data()
+            # 編集対象外のデータを特定して残し、新しいデータを追加する形
+            st.info("スプレッドシートを更新中...")
+            conn.update(data=pd.concat([df.drop(target_df.index), edited_df], ignore_index=True))
+            st.success("更新しました！")
             st.rerun()
 
-    st.link_button("📈 スプレッドシートを直接開く", "https://docs.google.com/spreadsheets/d/1debBotyTDwqUAmcEox0fdJIuvyv7Cko6I3NlvCTNVhY/edit")
-else:
-    st.info("データがありません。サイドバーから入力してください。")
+    st.link_button("📈 スプレッドシートを直接開いて確認", "https://docs.google.com/spreadsheets/d/1debBotyTDwqUAmcEox0fdJIuvyv7Cko6I3NlvCTNVhY/edit")
