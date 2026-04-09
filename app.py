@@ -107,11 +107,43 @@ if df is not None and not df.empty:
     # タブ
     tab1, tab2 = st.tabs(["📊 カテゴリ内訳", "📝 履歴を確認・修正"])
 
-    with tab1:
+with tab1:
+        st.subheader(f"📊 {selected_month} の詳細分析")
+        
+        # 1. カテゴリ別の合計（これまで通り）
         if not df_actual_all.empty:
             cat_df = df_actual_all.groupby('category')['amount'].sum().sort_values(ascending=False)
             st.bar_chart(cat_df)
-            st.table(cat_df.map(lambda x: f"¥{x:,}"))
+            
+            st.divider()
+            
+            # 2. 【新機能】カテゴリ × 支払方法 のマトリックス表
+            st.write("### 💳 カテゴリごとの支払方法の内訳")
+            
+            # ピボットテーブルを作成（行：カテゴリ、列：支払方法）
+            pay_method_analysis = df_actual_all.pivot_table(
+                index='category', 
+                columns='method', 
+                values='amount', 
+                aggfunc='sum', 
+                fill_value=0
+            )
+            
+            # 合計列を追加して多い順に並び替え
+            pay_method_analysis['合計'] = pay_method_analysis.sum(axis=1)
+            pay_method_analysis = pay_method_analysis.sort_values('合計', ascending=False)
+            
+            # 表を見やすく表示（カンマ区切り）
+            st.table(pay_method_analysis.map(lambda x: f"¥{x:,}"))
+            
+            # 3. 積み上げ棒グラフで視覚化
+            st.write("### 📈 支払方法の構成（視覚化）")
+            # 合計列を除いたデータでグラフ作成
+            chart_data = pay_method_analysis.drop(columns=['合計'])
+            st.bar_chart(chart_data)
+            
+        else:
+            st.info("集計対象のデータがありません。")
 
 with tab2:
         view_mode = st.radio("表示リスト:", [f"{selected_month} 発生分", f"{selected_month} 支払分"], horizontal=True)
