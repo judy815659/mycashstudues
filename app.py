@@ -57,93 +57,52 @@ with st.sidebar:
 df = get_data()
 
 if df is not None and not df.empty:
-    # --- データクレンジング（ここが計算精度の肝です） ---
-    # 金額を数値に変換し、エラー（空欄など）は0にする
+    # --- 1. 型変換を徹底（ここがズレていると金額が合わなくなります） ---
+    df = df.copy() # 警告防止
+    
+    # 金額：文字が入っていても無理やり数値にする
     df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0).astype(int)
     
-    # 日付と月の処理
-    df['date_dt'] = pd.to_datetime(df['date'], errors='coerce')
-    df['month_key'] = df['date_dt'].dt.strftime('%Y-%m') 
+    # チェックボックス：1, "1", True, "TRUE" をすべて「集計対象」として認める
+    def cleanup_bool(x):
+        if str(x).upper() in ["TRUE", "1", "1.0", "YES"]: return 1
+        return 0
+    df['is_calc_clean'] = df['is_calc'].apply(cleanup_bool)
     
-    # 支払い月の表記を統一 (2026-04 形式)
-    df['payment_month'] = df['payment_month'].astype(str).str.replace('/', '-').str.strip()
+    # 日付：パースに失敗しても壊れないようにする
+    df['date_dt'] = pd.to_datetime(df['date'], errors='coerce')
+    df['month_key'] = df['date_dt'].dt.strftime('%Y-%m')
+    
+    # 支払い月：スペースを消してハイフンに統一
+    df['pay_month_clean'] = df['payment_month'].astype(str).str.replace('/', '-').str.strip()
 
-    # --- 月の選択 ---
+    # --- 2. 表示月の選択 ---
     available_months = sorted(df['month_key'].dropna().unique(), reverse=True)
+    if not available_months: # もし日付が1つも取れなかった場合の予備
+        available_months = [datetime.now().strftime('%Y-%m')]
     selected_month = st.selectbox("表示する月を選択してください", available_months)
 
-    # --- 集計ロジックの修正 ---
-    # 1. その月の「発生ベース」支出（その月に買ったもの合計）
-    # 条件：選択月と一致 ＆ 支出 ＆ 集計対象(is_calc=1)
-    df_selected_actual = df[
+    # --- 3. 厳密な集計 ---
+    # 【実支出】
+    # 条件：1. 発生月が選択月 2. 支出である 3. 集計対象フラグが立っている
+    df_actual = df[
         (df['month_key'] == selected_month) & 
-        (df['type'] == '支出') & 
-        (df['is_calc'] == 1)
+        (df['type'].str.contains('支出')) & 
+        (df['is_calc_clean'] == 1)
     ]
-    total_actual = int(df_selected_actual['amount'].sum())
+    total_actual = int(df_actual['amount'].sum())
 
-    # 2. その月の「支払いベース」支出（その月に引落とされる合計）
-    # 条件：支払い月が選択月と一致 ＆ 支出
-    df_selected_pay = df[
-        (df['payment_month'] == selected_month) & 
-        (df['type'] == '支出')
+    # 【引落予定】
+    # 条件：1. 支払い指定月が選択月 2. 支出である
+    df_pay = df[
+        (df['pay_month_clean'] == selected_month) & 
+        (df['type'].str.contains('支出'))
     ]
-    total_pay = int(df_selected_pay['amount'].sum())
+    total_pay = int(df_pay['amount'].sum())
 
-    # --- 表示（小数点を消してカンマ区切りに） ---
+    # --- 4. 表示 ---
     col1, col2 = st.columns(2)
     col1.metric(f"📊 {selected_month} の実支出", f"¥{total_actual:,}")
     col2.metric(f"📅 {selected_month} の引落予定", f"¥{total_pay:,}")
-
-    st.divider()
-
-    # --- 📈 分析タブ ---
-    tab1, tab2 = st.tabs(["🍕 カテゴリ内訳", "📈 支出推移"])
-
-    with tab1:
-        if not df_selected_actual.empty:
-            category_df = df_selected_actual.groupby('category')['amount'].sum().sort_values(ascending=False)
-            st.bar_chart(category_df)
-            # テーブルも整数表記に
-            st.table(category_df.map(lambda x: f"¥{x:,}"))
-        else:
-            st.info("この月の支出データはありません。")
-
-    with tab2:
-        monthly_trend = df[df['type'] == '支出'].groupby('month_key')['amount'].sum().reset_index()
-        st.line_chart(data=monthly_trend, x='month_key', y='amount')
-
-    st.divider()
     
-    # --- 履歴一覧 ---
-    st.subheader(f"📝 {selected_month} の履歴")
-    # 表示用に一時的な列を削除し、日付を綺麗に
-    df_history = df[df['month_key'] == selected_month].copy()
-    df_history['date'] = df_history['date_dt'].dt.strftime('%Y-%m-%d')
-    df_display = df_history.drop(columns=['date_dt', 'month_key']).sort_values("date", ascending=False)
-    
-    # 履歴一覧でも小数点を消す
-    edited_df = st.data_editor(df_display, use_container_width=True, num_rows="dynamic")
-    
-    if st.button("🗑️ この月の変更を反映する"):
-        other_months_df = df[df['month_key'] != selected_month].drop(columns=['date_dt', 'month_key'])
-        final_df = pd.concat([other_months_df, edited_df], ignore_index=True)
-        conn.update(data=final_df)
-        st.success("更新しました！")
-        st.rerun()
-    # --- 履歴一覧 ---
-    st.subheader(f"📝 {selected_month} の履歴")
-    # 選択した月だけの履歴を表示
-    df_history = df[df['month_key'] == selected_month].sort_values("date", ascending=False)
-    # 表示用に不要な列を隠す
-    df_history = df_history.drop(columns=['date_dt', 'month_key'])
-    
-    # 修正前：edited_df = st.data_editor(df_display, use_container_width=True, num_rows="dynamic")
-    
-    # 修正後：keyにselected_monthを含めることで、月を切り替えるたびに別物として認識させます
-    edited_df = st.data_editor(
-        df_display, 
-        use_container_width=True, 
-        num_rows="dynamic",
-        key=f"data_editor_{selected_month}"  # ← ここを追加！
-    )
+    # (この下にタブや履歴一覧を続ける)
