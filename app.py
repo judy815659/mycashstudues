@@ -57,52 +57,80 @@ with st.sidebar:
 df = get_data()
 
 if df is not None and not df.empty:
-    # データ型の整理
-    df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0)
+    # --- データクレンジング（ここが計算精度の肝です） ---
+    # 金額を数値に変換し、エラー（空欄など）は0にする
+    df['amount'] = pd.to_numeric(df['amount'], errors='coerce').fillna(0).astype(int)
+    
+    # 日付と月の処理
     df['date_dt'] = pd.to_datetime(df['date'], errors='coerce')
-    df['month_key'] = df['date_dt'].dt.strftime('%Y-%m') # 発生ベースの月
-    df['payment_month'] = df['payment_month'].astype(str).str.replace('/', '-') # 支払いベースの月
+    df['month_key'] = df['date_dt'].dt.strftime('%Y-%m') 
+    
+    # 支払い月の表記を統一 (2026-04 形式)
+    df['payment_month'] = df['payment_month'].astype(str).str.replace('/', '-').str.strip()
 
-    # --- 📅 表示する月の選択 ---
-    # スプシにある全月をリスト化して選択可能にする
+    # --- 月の選択 ---
     available_months = sorted(df['month_key'].dropna().unique(), reverse=True)
     selected_month = st.selectbox("表示する月を選択してください", available_months)
 
-    # 選択された月のデータを抽出
-    # 1. その月の「支出」合計 (is_calc=1のもの)
-    df_selected_actual = df[(df['month_key'] == selected_month) & (df['is_calc'] == 1) & (df['type'] == '支出')]
-    total_actual = df_selected_actual['amount'].sum()
+    # --- 集計ロジックの修正 ---
+    # 1. その月の「発生ベース」支出（その月に買ったもの合計）
+    # 条件：選択月と一致 ＆ 支出 ＆ 集計対象(is_calc=1)
+    df_selected_actual = df[
+        (df['month_key'] == selected_month) & 
+        (df['type'] == '支出') & 
+        (df['is_calc'] == 1)
+    ]
+    total_actual = int(df_selected_actual['amount'].sum())
 
-    # 2. その月に「支払う予定（クレカ等）」の合計 (payment_monthが一致するもの)
-    df_selected_pay = df[(df['payment_month'] == selected_month) & (df['type'] == '支出')]
-    total_pay = df_selected_pay['amount'].sum()
+    # 2. その月の「支払いベース」支出（その月に引落とされる合計）
+    # 条件：支払い月が選択月と一致 ＆ 支出
+    df_selected_pay = df[
+        (df['payment_month'] == selected_month) & 
+        (df['type'] == '支出')
+    ]
+    total_pay = int(df_selected_pay['amount'].sum())
 
-    # メトリック表示
+    # --- 表示（小数点を消してカンマ区切りに） ---
     col1, col2 = st.columns(2)
-    col1.metric(f"📊 {selected_month} の実支出", f"¥{int(total_actual):,}")
-    col2.metric(f"📅 {selected_month} の引落し・支払予定", f"¥{int(total_pay):,}")
+    col1.metric(f"📊 {selected_month} の実支出", f"¥{total_actual:,}")
+    col2.metric(f"📅 {selected_month} の引落予定", f"¥{total_pay:,}")
 
     st.divider()
 
-    # --- 📈 分析セクション ---
+    # --- 📈 分析タブ ---
     tab1, tab2 = st.tabs(["🍕 カテゴリ内訳", "📈 支出推移"])
 
     with tab1:
-        st.subheader(f"{selected_month} のカテゴリ別内訳")
         if not df_selected_actual.empty:
-            pie_data = df_selected_actual.groupby('category')['amount'].sum().sort_values(ascending=False)
-            st.bar_chart(pie_data)
-            st.table(pie_data)
+            category_df = df_selected_actual.groupby('category')['amount'].sum().sort_values(ascending=False)
+            st.bar_chart(category_df)
+            # テーブルも整数表記に
+            st.table(category_df.map(lambda x: f"¥{x:,}"))
         else:
-            st.info("この月のデータはありません。")
+            st.info("この月の支出データはありません。")
 
     with tab2:
-        st.subheader("月別の支出推移")
         monthly_trend = df[df['type'] == '支出'].groupby('month_key')['amount'].sum().reset_index()
         st.line_chart(data=monthly_trend, x='month_key', y='amount')
 
     st.divider()
     
+    # --- 履歴一覧 ---
+    st.subheader(f"📝 {selected_month} の履歴")
+    # 表示用に一時的な列を削除し、日付を綺麗に
+    df_history = df[df['month_key'] == selected_month].copy()
+    df_history['date'] = df_history['date_dt'].dt.strftime('%Y-%m-%d')
+    df_display = df_history.drop(columns=['date_dt', 'month_key']).sort_values("date", ascending=False)
+    
+    # 履歴一覧でも小数点を消す
+    edited_df = st.data_editor(df_display, use_container_width=True, num_rows="dynamic")
+    
+    if st.button("🗑️ この月の変更を反映する"):
+        other_months_df = df[df['month_key'] != selected_month].drop(columns=['date_dt', 'month_key'])
+        final_df = pd.concat([other_months_df, edited_df], ignore_index=True)
+        conn.update(data=final_df)
+        st.success("更新しました！")
+        st.rerun()
     # --- 履歴一覧 ---
     st.subheader(f"📝 {selected_month} の履歴")
     # 選択した月だけの履歴を表示
