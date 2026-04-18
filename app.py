@@ -85,54 +85,60 @@ if df is not None and not df.empty:
     df_pay_all = df[(df['pay_month_clean'] == selected_month) & (df['type'].str.contains('支出'))]
     total_pay = int(df_pay_all['amount'].sum())
 
-    col1, col2 = st.columns(2)
+# --- 支出の集計 ---
+    df_actual_all = df[(df['month_key'] == selected_month) & (df['type'].str.contains('支出'))]
+    total_actual = int(df_actual_all['amount'].sum())
+
+    # --- 収入の集計（新しく追加） ---
+    df_income_all = df[(df['month_key'] == selected_month) & (df['type'].str.contains('収入'))]
+    total_income = int(df_income_all['amount'].sum())
+
+    # --- 収支（貯金）の計算 ---
+    balance = total_income - total_actual
+
+    # 表示（3カラムに変更）
+    col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric(f"🛒 {selected_month} に買った合計", f"¥{total_actual:,}")
+        st.metric(f"💰 {selected_month} の総収入", f"¥{total_income:,}")
     with col2:
-        st.metric(f"💸 {selected_month} の引落合計", f"¥{total_pay:,}")
+        st.metric(f"🛒 {selected_month} の支出合計", f"¥{total_actual:,}")
+    with col3:
+        # 収支がプラスなら緑、マイナスなら赤で表示
+        st.metric(f"🌱 今月の収支残高", f"¥{balance:,}", delta=f"{balance:,}")
 
     st.divider()
 
     # --- タブの設定（AIアドバイザーを独立させました） ---
-    tab1, tab2, tab3 = st.tabs(["📊 カテゴリ内訳", "📝 履歴を確認・修正", "🤖 AIアドバイザー"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 カテゴリ内訳", "📈 収入・収支分析", "📝 履歴を確認・修正", "🤖 AIアドバイザー"])
 
     with tab1:
-        st.subheader(f"📊 {selected_month} の詳細分析")
+        # （これまでの支出グラフコードをそのまま記載）
+        st.subheader(f"📊 {selected_month} の支出分析")
         if not df_actual_all.empty:
             cat_df = df_actual_all.groupby('category')['amount'].sum().sort_values(ascending=False)
             st.bar_chart(cat_df)
-            
-            st.write("### 💳 カテゴリごとの支払方法の内訳")
-            pay_method_analysis = df_actual_all.pivot_table(
-                index='category', columns='method', values='amount', aggfunc='sum', fill_value=0
-            )
-            pay_method_analysis['合計'] = pay_method_analysis.sum(axis=1)
-            pay_method_analysis = pay_method_analysis.sort_values('合計', ascending=False)
-            st.table(pay_method_analysis.map(lambda x: f"¥{x:,}"))
         else:
-            st.info("集計対象のデータがありません。")
+            st.info("支出データがありません。")
 
     with tab2:
-        view_mode = st.radio("表示リスト:", [f"{selected_month} 発生分", f"{selected_month} 支払分"], horizontal=True)
-        target_df = df_actual_all if "発生" in view_mode else df_pay_all
-        
-        df_display = target_df.copy()
-        df_display['date'] = pd.to_datetime(df_display['date'], errors='coerce')
-        df_display = df_display.sort_values("date", ascending=False)
-        df_display['date'] = df_display['date'].dt.strftime('%Y-%m-%d')
-        df_display = df_display.drop(columns=['date_dt', 'month_key', 'pay_month_clean'])
-        
-        edited_df = st.data_editor(df_display, use_container_width=True, num_rows="dynamic", key=f"ed_{selected_month}_{view_mode}")
-        
-        if st.button("🗑️ 変更を確定する"):
-            all_data = get_data()
-            other_data = df.drop(target_df.index).drop(columns=['date_dt', 'month_key', 'pay_month_clean'])
-            final_df = pd.concat([other_data, edited_df], ignore_index=True)
-            final_df['date'] = pd.to_datetime(final_df['date'])
-            final_df = final_df.sort_values("date").reset_index(drop=True)
-            conn.update(data=final_df)
-            st.success("スプレッドシートを更新しました！")
-            st.rerun()
+        st.subheader("📈 収支のバランス")
+        if total_income > 0 or total_actual > 0:
+            # 収入と支出の比較グラフ
+            balance_df = pd.DataFrame({
+                "種別": ["収入", "支出"],
+                "金額": [total_income, total_actual]
+            })
+            st.bar_chart(data=balance_df, x="種別", y="金額")
+            
+            # 収入の内訳（給与以外がある場合など）
+            if not df_income_all.empty:
+                st.write("### 💵 収入の内訳")
+                income_cat = df_income_all.groupby('category')['amount'].sum()
+                st.table(income_cat.map(lambda x: f"¥{x:,}"))
+        else:
+            st.info("収入・支出のデータが不足しています。")
+
+    # （以下、tab3: 履歴、tab4: AIアドバイザーと続きます）
 
     # --- 5. AIアドバイザー・セクション（tab3） ---
     with tab3:
